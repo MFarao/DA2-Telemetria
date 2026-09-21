@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Telemetría Unitree — TP05</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+  <!-- ========== Cabecera y captura ========== -->
+  <header class="topbar">
+    <div class="marca">
+      <h1>Telemetría Unitree</h1>
+      <p id="robotNombre">Conectando con el servidor…</p>
+    </div>
+
+    <div class="captura" role="group" aria-label="Captura y exportación de muestras">
+      <span id="capturaEstado" class="captura-msg" aria-live="polite">0 muestras capturadas</span>
+      <label class="campo-inline">Separador
+        <select id="separador">
+          <option value=",">coma ( , )</option>
+          <option value=";">punto y coma ( ; )</option>
+        </select>
+      </label>
+      <button id="btnCapturar" class="btn btn-primario" type="button" disabled>Capturar muestra</button>
+      <button id="btnExportar" class="btn" type="button" disabled>Exportar CSV</button>
+      <button id="btnLimpiar" class="btn btn-texto" type="button" disabled>Descartar muestras</button>
+    </div>
+  </header>
+
+  <!-- ========== Estado de conexión ========== -->
+  <section class="estado" aria-label="Estado de la conexión">
+    <div id="pillConexion" class="pill" data-estado="conectando">
+      <span class="punto" aria-hidden="true"></span>
+      <span id="pillTexto">Conectando…</span>
+    </div>
+
+    <dl class="metricas">
+      <div><dt>Frecuencia</dt><dd id="mHz">—</dd></div>
+      <div><dt>Último dato</dt><dd id="mEdad">—</dd></div>
+      <div><dt>Reloj del robot</dt><dd id="mTs">—</dd></div>
+    </dl>
+
+    <div class="seg" role="group" aria-label="Transporte de datos">
+      <button type="button" data-transporte="ws" aria-pressed="true">WebSocket</button>
+      <button type="button" data-transporte="poll" aria-pressed="false">Polling 500 ms</button>
+    </div>
+
+    <form id="formServidor" class="servidor">
+      <label for="inputApi">Servidor</label>
+      <input id="inputApi" type="text" spellcheck="false" autocomplete="off" placeholder="http://192.168.0.10:8001">
+      <button class="btn" type="submit">Conectar</button>
+    </form>
+  </section>
+
+  <div id="banner" class="banner" role="alert" hidden>
+    <strong>Sin conexión con el servidor.</strong>
+    <span id="bannerDetalle"></span>
+  </div>
+
+  <main class="grid">
+
+    <!-- ========== 1. Motores ========== -->
+    <section class="panel p-motores" aria-labelledby="hMotores">
+      <header class="panel-cab">
+        <h2 id="hMotores">Motores</h2>
+        <p id="motoresResumen" class="panel-meta"></p>
+      </header>
+
+      <div class="motores-cuerpo">
+        <div class="motores-tabla">
+          <ul class="leyenda-temp" aria-label="Semáforo de temperatura">
+            <li><span class="dot" data-nivel="ok"></span>Normal &lt; 40 °C <b id="cntOk">0</b></li>
+            <li><span class="dot" data-nivel="warn"></span>Atención 40–60 °C <b id="cntWarn">0</b></li>
+            <li><span class="dot" data-nivel="hot"></span>Crítica &gt; 60 °C <b id="cntHot">0</b></li>
+          </ul>
+
+          <div class="tabla-scroll">
+            <table id="tablaMotores">
+              <caption class="sr-only">Estado de cada motor</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="c-sel"><span class="sr-only">Graficar</span></th>
+                  <th scope="col">Motor</th>
+                  <th scope="col" class="num">Temp.</th>
+                  <th scope="col" class="num">Ángulo</th>
+                  <th scope="col" class="num">Velocidad</th>
+                  <th scope="col" class="num">Torque</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyMotores"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="motores-grafico">
+          <div class="grafico-cab">
+            <div class="seg" id="segMetrica" role="group" aria-label="Magnitud a graficar">
+              <button type="button" data-metrica="temperatura" aria-pressed="true">Temperatura</button>
+              <button type="button" data-metrica="angulo" aria-pressed="false">Ángulo</button>
+              <button type="button" data-metrica="velocidad" aria-pressed="false">Velocidad</button>
+              <button type="button" data-metrica="torque" aria-pressed="false">Torque</button>
+            </div>
+            <p class="ayuda">Marcá hasta 6 motores en la tabla.</p>
+          </div>
+          <div class="chart-caja">
+            <canvas id="chartMotores" aria-label="Historial de los motores seleccionados" role="img"></canvas>
+            <p id="chartMotoresVacio" class="chart-vacio" hidden>Marcá al menos un motor en la tabla para ver su historial.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 2. IMU ========== -->
+    <section class="panel p-imu" aria-labelledby="hImu">
+      <header class="panel-cab">
+        <h2 id="hImu">Inclinación (IMU)</h2>
+        <p class="panel-meta">Últimas <span id="imuMuestras">0</span> muestras</p>
+      </header>
+
+      <div class="imu-arriba">
+        <svg id="horizonte" class="horizonte" viewBox="-100 -100 200 200" role="img" aria-label="Horizonte artificial: muestra roll y pitch del robot"></svg>
+
+        <dl class="imu-valores">
+          <div class="valor"><dt>Roll</dt><dd><span id="roll">—</span></dd></div>
+          <div class="valor"><dt>Pitch</dt><dd><span id="pitch">—</span></dd></div>
+          <div class="valor"><dt>Yaw</dt><dd><span id="yaw">—</span></dd></div>
+        </dl>
+
+        <dl class="imu-acel">
+          <div><dt>ax</dt><dd id="ax">—</dd></div>
+          <div><dt>ay</dt><dd id="ay">—</dd></div>
+          <div><dt>az</dt><dd id="az">—</dd></div>
+          <div class="unidad">m/s²</div>
+        </dl>
+      </div>
+
+      <div class="chart-caja chart-imu">
+        <canvas id="chartIMU" aria-label="Historial de roll, pitch y yaw" role="img"></canvas>
+      </div>
+    </section>
+
+    <!-- ========== 3. BMS ========== -->
+    <section class="panel p-bms" aria-labelledby="hBms">
+      <header class="panel-cab">
+        <h2 id="hBms">Batería (BMS)</h2>
+      </header>
+
+      <div class="soc">
+        <div class="valor valor-grande"><span id="soc">—</span></div>
+        <div class="soc-barra" role="progressbar" aria-label="Nivel de carga" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="socRelleno" class="soc-relleno"></div>
+        </div>
+      </div>
+
+      <dl class="bms-datos">
+        <div><dt>Corriente</dt><dd id="bmsI">—</dd></div>
+        <div><dt>Temperatura</dt><dd id="bmsT">—</dd></div>
+      </dl>
+
+      <h3 class="sub">Celdas</h3>
+      <p id="celdasResumen" class="panel-meta"></p>
+      <div id="celdas" class="celdas"></div>
+      <p id="celdasVacio" class="vacio" hidden>Este robot o simulador no informa voltajes de celda.</p>
+    </section>
+
+    <!-- ========== 4. Fuerzas por pata ========== -->
+    <section class="panel p-fuerzas" aria-labelledby="hFuerzas">
+      <header class="panel-cab">
+        <h2 id="hFuerzas">Contacto de patas</h2>
+        <p id="fuerzasResumen" class="panel-meta"></p>
+      </header>
+
+      <div id="fuerzasDiagrama">
+        <svg class="robot-planta" viewBox="0 0 220 290" role="img" aria-label="Robot visto desde arriba con las cuatro patas">
+          <text x="110" y="14" class="rp-texto" text-anchor="middle">frente</text>
+          <rect x="90" y="24" width="40" height="34" rx="12" class="rp-cuerpo"/>
+          <rect x="76" y="60" width="68" height="170" rx="26" class="rp-cuerpo"/>
+          <!-- patas: línea desde el cuerpo hasta el apoyo -->
+          <path d="M144 88 L190 66"  class="rp-pierna"/>
+          <path d="M76 88 L30 66"    class="rp-pierna"/>
+          <path d="M144 202 L190 224" class="rp-pierna"/>
+          <path d="M76 202 L30 224"   class="rp-pierna"/>
+          <g id="pata-FL" class="pata"><circle cx="30"  cy="66"  r="22"/><text x="30"  y="71"  text-anchor="middle">FL</text></g>
+          <g id="pata-FR" class="pata"><circle cx="190" cy="66"  r="22"/><text x="190" y="71"  text-anchor="middle">FR</text></g>
+          <g id="pata-RL" class="pata"><circle cx="30"  cy="224" r="22"/><text x="30"  y="229" text-anchor="middle">RL</text></g>
+          <g id="pata-RR" class="pata"><circle cx="190" cy="224" r="22"/><text x="190" y="229" text-anchor="middle">RR</text></g>
+        </svg>
+
+        <ul class="patas-lista">
+          <li id="lp-FR"><span class="tag">FR</span> Delantera derecha <b>—</b></li>
+          <li id="lp-FL"><span class="tag">FL</span> Delantera izquierda <b>—</b></li>
+          <li id="lp-RR"><span class="tag">RR</span> Trasera derecha <b>—</b></li>
+          <li id="lp-RL"><span class="tag">RL</span> Trasera izquierda <b>—</b></li>
+        </ul>
+      </div>
+
+      <p id="fuerzasSinDatos" class="vacio" hidden>Este robot no informa contacto de patas por esta API.</p>
+    </section>
+  </main>
+
+  <footer class="pie">
+    <p id="notaDatos"></p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
